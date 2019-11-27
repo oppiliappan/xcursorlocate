@@ -1,11 +1,25 @@
 use std::thread;
 use std::time::{Duration, Instant};
 
-fn main() {
-    let win_width = 500u16;
-    let win_height = 500u16;
+struct Configuration {
+    max_size: u16,  // display pixels
+    duration: u16,  // milliseconds
+    thickness: u32, // display pixels
+    no_of_circles: u16,
+}
 
-    let (conn, screen_num) = xcb::Connection::connect(None).unwrap();
+fn main() {
+    let config = Configuration {
+        max_size: 200u16,
+        duration: 600u16,
+        thickness: 1,
+        no_of_circles: 6,
+    };
+    let win_width = config.max_size;
+    let win_height = config.max_size;
+
+    let (conn, screen_num) = xcb::Connection::connect(None)
+        .unwrap_or_else(|e| panic!("Unable to connect to X session: {}", e));
     let setup = conn.get_setup();
     let screen = setup.roots().nth(screen_num as usize).unwrap();
 
