@@ -81,7 +81,7 @@ fn main() {
         &[
             (xcb::GC_FOREGROUND, screen.white_pixel()),
             (xcb::GC_GRAPHICS_EXPOSURES, 0),
-            (xcb::GC_LINE_WIDTH, 1),
+            (xcb::GC_LINE_WIDTH, config.thickness),
         ],
     );
 
@@ -124,13 +124,13 @@ fn main() {
         &[win_on_top_atom],
     );
 
-    let mut circles = (1u16..10u16)
+    let mut circles = (0..config.no_of_circles)
         .map(|i| {
             xcb::Arc::new(
-                win_start_x + 25 * i as i16,
-                win_start_y + 25 * i as i16,
-                win_width - 50 * i,
-                win_height - 50 * i,
+                (config.max_size as i16) / (2 * config.no_of_circles as i16) * i as i16,
+                (config.max_size as i16) / (2 * config.no_of_circles as i16) * i as i16,
+                (config.max_size) - (config.max_size / config.no_of_circles) * i as u16,
+                (config.max_size) - (config.max_size / config.no_of_circles) * i as u16,
                 0,
                 360 << 6,
             )
@@ -151,8 +151,31 @@ fn main() {
                 let r = e.response_type() & !0x80;
                 match r {
                     xcb::EXPOSE => {
-                        xcb::poly_arc(&conn, win, gfx_ctx, &[circles.next().unwrap()]);
-                        conn.flush();
+                        let pointer = xcb::query_pointer(&conn, win).get_reply().unwrap();
+                        let p_x = pointer.root_x();
+                        let p_y = pointer.root_y();
+
+                        move_win_to_cursor(&conn, win, win_width, win_height, p_x, p_y);
+
+                        let loop_start = Instant::now();
+                        let anim_duration = Duration::from_millis(config.duration as u64);
+                        let circle_duration =
+                            Duration::from_millis((config.duration / config.no_of_circles) as u64);
+                        loop {
+                            match circles.next() {
+                                Some(c) => {
+                                    let _ = xcb::poly_arc(&conn, win, gfx_ctx, &[c]);
+                                    conn.flush();
+                                }
+                                None => {}
+                            };
+                            thread::sleep(circle_duration);
+                            let now = Instant::now();
+                            if now.duration_since(loop_start) > anim_duration {
+                                break;
+                            }
+                        }
+                        thread::sleep(Duration::from_millis(100));
                         break;
                     }
                     _ => {
@@ -162,31 +185,6 @@ fn main() {
             }
         }
     }
-
-    let pointer = xcb::query_pointer(&conn, win).get_reply().unwrap();
-    let p_x = pointer.root_x();
-    let p_y = pointer.root_y();
-
-    move_win_to_cursor(&conn, win, win_width, win_height, p_x, p_y);
-
-    let loop_start = Instant::now();
-    let anim_duration = Duration::from_millis(600);
-    let circle_duration = Duration::from_millis(60);
-    loop {
-        match circles.next() {
-            Some(c) => {
-                let _ = xcb::poly_arc(&conn, win, gfx_ctx, &[c]);
-                conn.flush();
-            }
-            None => {}
-        };
-        thread::sleep(circle_duration);
-        let now = Instant::now();
-        if now.duration_since(loop_start) > anim_duration {
-            break;
-        }
-    }
-    thread::sleep(Duration::from_millis(100));
 }
 
 fn move_win_to_cursor(
