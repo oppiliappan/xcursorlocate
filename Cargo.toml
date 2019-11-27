@@ -1,0 +1,11 @@
+[package]
+name = "xcursorlocate"
+version = "0.1.0"
+authors = ["Akshay <nerdypepper@tuta.io>"]
+edition = "2018"
+
+
+[dependencies.xcb]
+version = "0.9"
+features = ["shape"] # NOTE: mapping and unmapping circular windows might be faster
+
