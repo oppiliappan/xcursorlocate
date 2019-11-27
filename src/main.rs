@@ -21,10 +21,16 @@ fn main() {
     let (conn, screen_num) = xcb::Connection::connect(None)
         .unwrap_or_else(|e| panic!("Unable to connect to X session: {}", e));
     let setup = conn.get_setup();
-    let screen = setup.roots().nth(screen_num as usize).unwrap();
+    let screen = setup
+        .roots()
+        .nth(screen_num as usize)
+        .unwrap_or_else(|| panic!("Error accessing screen!"));
 
     let depths = screen.allowed_depths();
-    let mut alpha_depths = depths.filter(|d| d.depth() == 32u8);
+    let mut alpha_depths = depths.filter(|d| d.depth() == 32u8).peekable();
+    if alpha_depths.peek().is_none() {
+        panic!("Alpha channel not found!");
+    }
 
     let visual = alpha_depths
         .next()
@@ -55,7 +61,7 @@ fn main() {
         win_start_y,
         win_width,
         win_height,
-        2,
+        0,
         xcb::WINDOW_CLASS_INPUT_OUTPUT as u16,
         visual.visual_id(),
         &[
