@@ -26,12 +26,14 @@ fn main() {
         .nth(screen_num as usize)
         .unwrap_or_else(|| panic!("Error accessing screen!"));
 
+    // fetch all depths
     let depths = screen.allowed_depths();
     let mut alpha_depths = depths.filter(|d| d.depth() == 32u8).peekable();
     if alpha_depths.peek().is_none() {
         panic!("Alpha channel not found!");
     }
 
+    // fetch a visual supporting alpha channels
     let visual = alpha_depths
         .next()
         .unwrap()
@@ -66,8 +68,8 @@ fn main() {
         visual.visual_id(),
         &[
             (xcb::CW_BACK_PIXEL, 0x00),
-            (xcb::CW_BORDER_PIXEL, 0x00),
-            //(xcb::CW_OVERRIDE_REDIRECT, 1u32),
+            (xcb::CW_BORDER_PIXEL, 0x00), // you need this if you use alpha apparently
+            (xcb::CW_OVERRIDE_REDIRECT, 1u32), // dont take focus
             (xcb::CW_EVENT_MASK, xcb::EVENT_MASK_EXPOSURE),
             (xcb::CW_COLORMAP, colormap),
         ],
@@ -79,7 +81,7 @@ fn main() {
         gfx_ctx,
         win,
         &[
-            (xcb::GC_FOREGROUND, screen.white_pixel()),
+            (xcb::GC_FOREGROUND, screen.white_pixel()), // TODO: support different colors here
             (xcb::GC_GRAPHICS_EXPOSURES, 0),
             (xcb::GC_LINE_WIDTH, config.thickness),
         ],
@@ -125,6 +127,7 @@ fn main() {
     );
 
     let mut circles = (0..config.no_of_circles)
+        .rev() // TODO: add grow/shrink as option
         .map(|i| {
             xcb::Arc::new(
                 (config.max_size as i16) / (2 * config.no_of_circles as i16) * i as i16,
@@ -150,6 +153,7 @@ fn main() {
             Some(e) => {
                 let r = e.response_type() & !0x80;
                 match r {
+                    // the window is mapped to display
                     xcb::EXPOSE => {
                         let pointer = xcb::query_pointer(&conn, win).get_reply().unwrap();
                         let p_x = pointer.root_x();
