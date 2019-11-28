@@ -1,20 +1,32 @@
 use std::thread;
 use std::time::{Duration, Instant};
 
-struct Configuration {
+use serde::{Deserialize, Serialize};
+
+#[derive(Serialize, Deserialize)]
+struct IndicatorConfig {
     max_size: u16,  // display pixels
     duration: u16,  // milliseconds
     thickness: u32, // display pixels
     no_of_circles: u16,
+    color: u32,
+}
+
+// sane defaults
+impl std::default::Default for IndicatorConfig {
+    fn default() -> IndicatorConfig {
+        IndicatorConfig {
+            max_size: 200u16,
+            duration: 500u16,
+            thickness: 1,
+            no_of_circles: 5,
+            color: 0xFFFFFF,
+        }
+    }
 }
 
 fn main() {
-    let config = Configuration {
-        max_size: 200u16,
-        duration: 500u16,
-        thickness: 1,
-        no_of_circles: 5,
-    };
+    let config: IndicatorConfig = confy::load("xcursorlocate").unwrap();
 
     let padding = 10; // (???) largest circle gets clipped
     let win_width = config.max_size + padding;
@@ -83,7 +95,7 @@ fn main() {
         gfx_ctx,
         win,
         &[
-            (xcb::GC_FOREGROUND, screen.white_pixel()), // TODO: support different colors here
+            (xcb::GC_FOREGROUND, config.color),
             (xcb::GC_GRAPHICS_EXPOSURES, 0),
             (xcb::GC_LINE_WIDTH, config.thickness),
         ],
