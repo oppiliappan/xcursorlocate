@@ -1,0 +1,23 @@
+# mostly under ~/.config/xcursorlocate/ or ~/.xcursorlocate/ as
+# xcursorlocate.toml. auto generated on first run.
+
+# the size of the largest circle in the indicator
+max_size = 200
+
+# duration in milliseconds. values less than 200 might lead to the indicator
+# not being drawn on the screen at all
+duration = 500
+
+# the width of each circle in display pixels.
+thickness = 1
+
+# total circles displayed in the indicator. setting this to a value greater
+# than max_size/thickness could lead to the indicator not being drawn at all.
+no_of_circles = 7
+
+# indicator color, set to hex (0xRRGGBB) or 32 bit int.
+# alpha not supported (yet)
+color = 0x00FECA
+
+# values: Grow, Shrink
+animation = 'Shrink'
