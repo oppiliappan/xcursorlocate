@@ -4,12 +4,19 @@ use std::time::{Duration, Instant};
 use serde::{Deserialize, Serialize};
 
 #[derive(Serialize, Deserialize)]
+enum Animation {
+    Grow,
+    Shrink,
+}
+
+#[derive(Serialize, Deserialize)]
 struct IndicatorConfig {
-    max_size: u16,  // display pixels
-    duration: u16,  // milliseconds
-    thickness: u32, // display pixels
-    no_of_circles: u16,
-    color: u32,
+    max_size: u16,        // display pixels
+    duration: u16,        // milliseconds
+    thickness: u32,       // display pixels
+    no_of_circles: u16,   // number of circles to display
+    color: u32,           // color in hex, eg.: 0x00FECA
+    animation: Animation, // 'Grow' | 'Shrink'
 }
 
 // sane defaults
@@ -21,6 +28,7 @@ impl std::default::Default for IndicatorConfig {
             thickness: 1,
             no_of_circles: 5,
             color: 0xFFFFFF,
+            animation: Animation::Grow,
         }
     }
 }
@@ -29,8 +37,7 @@ fn main() {
     let config: IndicatorConfig = confy::load("xcursorlocate").unwrap();
 
     let padding = 10; // (???) largest circle gets clipped
-    let win_width = config.max_size + padding;
-    let win_height = config.max_size + padding;
+    let win_size = config.max_size + padding;
 
     let (conn, screen_num) = xcb::Connection::connect(None)
         .unwrap_or_else(|e| panic!("Unable to connect to X session: {}", e));
@@ -75,8 +82,8 @@ fn main() {
         screen.root(),
         win_start_x,
         win_start_y,
-        win_width,
-        win_height,
+        win_size,
+        win_size,
         0,
         xcb::WINDOW_CLASS_INPUT_OUTPUT as u16,
         visual.visual_id(),
@@ -140,8 +147,12 @@ fn main() {
         &[win_on_top_atom],
     );
 
-    let mut circles = (0..config.no_of_circles)
-        .rev() // TODO: add grow/shrink as option
+    let range: Box<dyn DoubleEndedIterator<Item = u16>> = match config.animation {
+        Animation::Grow => Box::new(0..config.no_of_circles),
+        Animation::Shrink => Box::new((0..config.no_of_circles).rev()),
+    };
+
+    let mut circles = range
         .map(|i| {
             xcb::Arc::new(
                 (config.max_size as i16) / (2 * config.no_of_circles as i16) * i as i16, // x
@@ -171,7 +182,7 @@ fn main() {
                     let p_x = pointer.root_x();
                     let p_y = pointer.root_y();
 
-                    move_win_to_cursor(&conn, win, win_width, win_height, p_x, p_y);
+                    move_win_to_cursor(&conn, win, win_size, p_x, p_y);
 
                     let loop_start = Instant::now();
                     let anim_duration = Duration::from_millis(config.duration as u64);
@@ -199,16 +210,9 @@ fn main() {
     }
 }
 
-fn move_win_to_cursor(
-    conn: &xcb::Connection,
-    win: u32,
-    win_width: u16,
-    win_height: u16,
-    p_x: i16,
-    p_y: i16,
-) {
-    let win_x = p_x - (win_width as i16) / 2;
-    let win_y = p_y - (win_height as i16) / 2;
+fn move_win_to_cursor(conn: &xcb::Connection, win: u32, win_size: u16, p_x: i16, p_y: i16) {
+    let win_x = p_x - (win_size as i16) / 2;
+    let win_y = p_y - (win_size as i16) / 2;
     xcb::configure_window(
         &conn,
         win,
