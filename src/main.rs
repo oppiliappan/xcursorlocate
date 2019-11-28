@@ -11,12 +11,14 @@ struct Configuration {
 fn main() {
     let config = Configuration {
         max_size: 200u16,
-        duration: 600u16,
+        duration: 500u16,
         thickness: 1,
-        no_of_circles: 6,
+        no_of_circles: 5,
     };
-    let win_width = config.max_size;
-    let win_height = config.max_size;
+
+    let padding = 10; // (???) largest circle gets clipped
+    let win_width = config.max_size + padding;
+    let win_height = config.max_size + padding;
 
     let (conn, screen_num) = xcb::Connection::connect(None)
         .unwrap_or_else(|e| panic!("Unable to connect to X session: {}", e));
@@ -130,12 +132,12 @@ fn main() {
         .rev() // TODO: add grow/shrink as option
         .map(|i| {
             xcb::Arc::new(
-                (config.max_size as i16) / (2 * config.no_of_circles as i16) * i as i16,
-                (config.max_size as i16) / (2 * config.no_of_circles as i16) * i as i16,
-                (config.max_size) - (config.max_size / config.no_of_circles) * i as u16,
-                (config.max_size) - (config.max_size / config.no_of_circles) * i as u16,
-                0,
-                360 << 6,
+                (config.max_size as i16) / (2 * config.no_of_circles as i16) * i as i16, // x
+                (config.max_size as i16) / (2 * config.no_of_circles as i16) * i as i16, // y
+                (config.max_size) - (config.max_size / config.no_of_circles) * i as u16, // width
+                (config.max_size) - (config.max_size / config.no_of_circles) * i as u16, // height
+                0,        // start angle
+                360 << 6, // end angle
             )
         })
         .collect::<Vec<xcb::Arc>>()
@@ -144,48 +146,42 @@ fn main() {
     xcb::map_window(&conn, win);
     conn.flush();
 
-    loop {
-        let event = conn.wait_for_event();
-        match event {
-            None => {
-                break;
-            }
-            Some(e) => {
-                let r = e.response_type() & !0x80;
-                match r {
-                    // the window is mapped to display
-                    xcb::EXPOSE => {
-                        let pointer = xcb::query_pointer(&conn, win).get_reply().unwrap();
-                        let p_x = pointer.root_x();
-                        let p_y = pointer.root_y();
+    // wait till window is mapped
+    let event = conn.wait_for_event();
+    match event {
+        None => {}
+        Some(e) => {
+            let r = e.response_type() & !0x80;
+            match r {
+                // the window is mapped to display
+                xcb::EXPOSE => {
+                    let pointer = xcb::query_pointer(&conn, win).get_reply().unwrap();
+                    let p_x = pointer.root_x();
+                    let p_y = pointer.root_y();
 
-                        move_win_to_cursor(&conn, win, win_width, win_height, p_x, p_y);
+                    move_win_to_cursor(&conn, win, win_width, win_height, p_x, p_y);
 
-                        let loop_start = Instant::now();
-                        let anim_duration = Duration::from_millis(config.duration as u64);
-                        let circle_duration =
-                            Duration::from_millis((config.duration / config.no_of_circles) as u64);
-                        loop {
-                            match circles.next() {
-                                Some(c) => {
-                                    let _ = xcb::poly_arc(&conn, win, gfx_ctx, &[c]);
-                                    conn.flush();
-                                }
-                                None => {}
-                            };
-                            thread::sleep(circle_duration);
-                            let now = Instant::now();
-                            if now.duration_since(loop_start) > anim_duration {
-                                break;
+                    let loop_start = Instant::now();
+                    let anim_duration = Duration::from_millis(config.duration as u64);
+                    let circle_duration =
+                        Duration::from_millis((config.duration / config.no_of_circles) as u64);
+                    loop {
+                        match circles.next() {
+                            Some(c) => {
+                                let _ = xcb::poly_arc(&conn, win, gfx_ctx, &[c]);
+                                conn.flush();
                             }
+                            None => {}
+                        };
+                        thread::sleep(circle_duration);
+                        let now = Instant::now();
+                        if now.duration_since(loop_start) > anim_duration {
+                            break;
                         }
-                        thread::sleep(Duration::from_millis(100));
-                        break;
                     }
-                    _ => {
-                        break;
-                    }
+                    thread::sleep(Duration::from_millis(100));
                 }
+                _ => {}
             }
         }
     }
