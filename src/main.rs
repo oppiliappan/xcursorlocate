@@ -1,5 +1,5 @@
 use std::thread;
-use std::time::{Duration, Instant};
+use std::time::Duration;
 
 use serde::{Deserialize, Serialize};
 
@@ -148,11 +148,11 @@ fn main() {
     );
 
     let range: Box<dyn DoubleEndedIterator<Item = u16>> = match config.animation {
-        Animation::Grow => Box::new(0..config.no_of_circles),
-        Animation::Shrink => Box::new((0..config.no_of_circles).rev()),
+        Animation::Shrink => Box::new(0..config.no_of_circles),
+        Animation::Grow => Box::new((0..config.no_of_circles).rev()),
     };
 
-    let mut circles = range
+    let circles = range
         .map(|i| {
             xcb::Arc::new(
                 (config.max_size as i16) / (2 * config.no_of_circles as i16) * i as i16, // x
@@ -184,27 +184,26 @@ fn main() {
 
                     move_win_to_cursor(&conn, win, win_size, p_x, p_y);
 
-                    let loop_start = Instant::now();
-                    let anim_duration = Duration::from_millis(config.duration as u64);
                     let circle_duration =
                         Duration::from_millis((config.duration / config.no_of_circles) as u64);
-                    loop {
-                        match circles.next() {
-                            Some(c) => {
-                                let _ = xcb::poly_arc(&conn, win, gfx_ctx, &[c]);
-                                conn.flush();
-                            }
-                            None => {}
-                        };
+                    for c in circles {
+                        let _ = xcb::poly_arc(&conn, win, gfx_ctx, &[c]);
+                        conn.flush();
                         thread::sleep(circle_duration);
-                        let now = Instant::now();
-                        if now.duration_since(loop_start) > anim_duration {
-                            break;
-                        }
+                        xcb::clear_area(
+                            &conn,
+                            false,
+                            win,
+                            c.x(),
+                            c.y(),
+                            c.width() + padding + config.thickness as u16,
+                            c.height() + padding + config.thickness as u16,
+                        );
+                        conn.flush();
                     }
                     thread::sleep(Duration::from_millis(100));
                 }
-                _ => {}
+                _ => eprintln!("how did you even get here: {}", r),
             }
         }
     }
