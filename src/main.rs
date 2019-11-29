@@ -3,32 +3,37 @@ use std::time::Duration;
 
 use serde::{Deserialize, Serialize};
 
+mod animations;
+use animations::Animation;
+
 #[derive(Serialize, Deserialize)]
-enum Animation {
+enum Kind {
     Grow,
+    GrowOutline,
     Shrink,
+    ShrinkOutline,
 }
 
 #[derive(Serialize, Deserialize)]
-struct IndicatorConfig {
-    max_size: u16,        // display pixels
-    duration: u16,        // milliseconds
-    thickness: u32,       // display pixels
-    no_of_circles: u16,   // number of circles to display
-    color: u32,           // color in hex, eg.: 0x00FECA
-    animation: Animation, // 'Grow' | 'Shrink'
+pub struct IndicatorConfig {
+    max_size: u16,   // display pixels
+    duration: u64,   // milliseconds
+    thickness: u32,  // display pixels
+    framerate: u16,  // number of circles to display
+    color: u32,      // color in hex, eg.: 0x00FECA
+    animation: Kind, // 'Grow' | 'Shrink' | 'GrowOutline' | 'ShrinkOutline'
 }
 
 // sane defaults
 impl std::default::Default for IndicatorConfig {
     fn default() -> IndicatorConfig {
         IndicatorConfig {
-            max_size: 200u16,
-            duration: 500u16,
+            max_size: 300u16,
+            duration: 500u64,
             thickness: 1,
-            no_of_circles: 5,
+            framerate: 30,
             color: 0xFFFFFF,
-            animation: Animation::Grow,
+            animation: Kind::Grow,
         }
     }
 }
@@ -36,7 +41,7 @@ impl std::default::Default for IndicatorConfig {
 fn main() {
     let config: IndicatorConfig = confy::load("xcursorlocate").unwrap();
 
-    let padding = 10; // (???) largest circle gets clipped
+    let padding = config.thickness as u16; // (???) largest circle gets clipped
     let win_size = config.max_size + padding;
 
     let (conn, screen_num) = xcb::Connection::connect(None)
@@ -147,24 +152,13 @@ fn main() {
         &[win_on_top_atom],
     );
 
-    let range: Box<dyn DoubleEndedIterator<Item = u16>> = match config.animation {
-        Animation::Shrink => Box::new(0..config.no_of_circles),
-        Animation::Grow => Box::new((0..config.no_of_circles).rev()),
+    let fr = config.framerate;
+    let animation = match config.animation {
+        Kind::Grow => Animation::circles(config, Box::new((0..fr).rev()), false),
+        Kind::GrowOutline => Animation::circles(config, Box::new((0..fr).rev()), true),
+        Kind::Shrink => Animation::circles(config, Box::new(0..fr), false),
+        Kind::ShrinkOutline => Animation::circles(config, Box::new(0..fr), true),
     };
-
-    let circles = range
-        .map(|i| {
-            xcb::Arc::new(
-                (config.max_size as i16) / (2 * config.no_of_circles as i16) * i as i16, // x
-                (config.max_size as i16) / (2 * config.no_of_circles as i16) * i as i16, // y
-                (config.max_size) - (config.max_size / config.no_of_circles) * i as u16, // width
-                (config.max_size) - (config.max_size / config.no_of_circles) * i as u16, // height
-                0,        // start angle
-                360 << 6, // end angle
-            )
-        })
-        .collect::<Vec<xcb::Arc>>()
-        .into_iter();
 
     xcb::map_window(&conn, win);
     conn.flush();
@@ -183,24 +177,8 @@ fn main() {
                     let p_y = pointer.root_y();
 
                     move_win_to_cursor(&conn, win, win_size, p_x, p_y);
+                    animation.play(&conn, win, gfx_ctx);
 
-                    let circle_duration =
-                        Duration::from_millis((config.duration / config.no_of_circles) as u64);
-                    for c in circles {
-                        let _ = xcb::poly_arc(&conn, win, gfx_ctx, &[c]);
-                        conn.flush();
-                        thread::sleep(circle_duration);
-                        xcb::clear_area(
-                            &conn,
-                            false,
-                            win,
-                            c.x(),
-                            c.y(),
-                            c.width() + padding + config.thickness as u16,
-                            c.height() + padding + config.thickness as u16,
-                        );
-                        conn.flush();
-                    }
                     thread::sleep(Duration::from_millis(100));
                 }
                 _ => eprintln!("how did you even get here: {}", r),
@@ -209,22 +187,26 @@ fn main() {
     }
 }
 
-fn move_win_to_cursor(conn: &xcb::Connection, win: u32, win_size: u16, p_x: i16, p_y: i16) {
+fn move_win_to_cursor(
+    conn: &xcb::Connection,
+    win: u32,
+    win_size: u16,
+    p_x: i16,
+    p_y: i16,
+) -> (u32, u32) {
     let win_x = p_x - (win_size as i16) / 2;
     let win_y = p_y - (win_size as i16) / 2;
+    let win_x = if win_x < 0 { 0 } else { win_x as u32 };
+    let win_y = if win_y < 0 { 0 } else { win_y as u32 };
+
     xcb::configure_window(
         &conn,
         win,
         &[
-            (
-                xcb::CONFIG_WINDOW_X as u16,
-                if win_x < 0 { 0 } else { win_x as u32 },
-            ),
-            (
-                xcb::CONFIG_WINDOW_Y as u16,
-                if win_y < 0 { 0 } else { win_y as u32 },
-            ),
+            (xcb::CONFIG_WINDOW_X as u16, win_x),
+            (xcb::CONFIG_WINDOW_Y as u16, win_y),
         ],
     );
     conn.flush();
+    return (win_x, win_y);
 }
