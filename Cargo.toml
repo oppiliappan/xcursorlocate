@@ -3,6 +3,13 @@ name = "xcursorlocate"
 version = "0.1.1"
 authors = ["Akshay <nerdypepper@tuta.io>"]
 edition = "2018"
+description = "cursor location indicator for X11"
+homepage = "https://github.com/nerdypepper/xcursorlocate"
+repository = "https://github.com/nerdypepper/xcursorlocate"
+readme = "./readme.md"
+keywords = ["cursor", "x11", "visual", "xcb"]
+categories = ["graphics", "visualization"]
+license = "GPL-3.0-or-later"
 
 [dependencies]
 confy = "0.3.1"
