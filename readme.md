@@ -7,11 +7,13 @@
 ### install
 
 to build `xcursorlocate`, you require the `libxcb-devel`
-package.  
+package (please follow [these](https://www.rust-lang.org/tools/install) instructions to install `cargo` and `rust`).  
+
 ```shell
 $ git clone https://github.com/nerdypepper/xcursorlocate
 $ cd xcursorlocate
 $ cargo install --force --path ./
+# make sure to add ~/.cargo/bin to your $PATH
 ```
 
 ### usage
